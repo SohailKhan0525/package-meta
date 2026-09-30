@@ -47,6 +47,35 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Sync workflow-run checkout with main
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          MAIN_SHA="$(git rev-parse origin/main)"
+
+          if [[ "$HEAD_SHA" != "$MAIN_SHA" ]]; then
+            echo "main advanced after CI completed; checking whether the newer commits are release-safe."
+            CHANGED="$(git diff --name-only "$HEAD_SHA" "$MAIN_SHA")"
+
+            while IFS= read -r FILE; do
+              [[ -z "$FILE" ]] && continue
+              case "$FILE" in
+                .github/*|README.md) ;;
+                *)
+                  echo "main contains an untested change: $FILE"
+                  echo "Waiting for CI on the newer main commit instead of releasing it."
+                  exit 1
+                  ;;
+              esac
+            done <<< "$CHANGED"
+
+            git reset --hard "$MAIN_SHA"
+          fi
+
       - name: Validate package
         shell: bash
         run: |
