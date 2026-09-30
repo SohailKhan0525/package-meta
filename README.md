@@ -7,7 +7,7 @@ Tiny, dependency-free local package metadata and package-root resolver for Node.
 ## Install
 
 ```bash
-npm install package-meta
+npm install @sohailkhan0525/package-meta
 ```
 
 ## Usage
@@ -15,7 +15,7 @@ npm install package-meta
 ### ESM
 
 ```ts
-import { packageMeta } from "package-meta";
+import { packageMeta } from "@sohailkhan0525/package-meta";
 
 const meta = packageMeta(import.meta.url);
 
@@ -28,7 +28,7 @@ console.log(meta.packageJson.version);
 ### CommonJS
 
 ```js
-const { packageMeta } = require("package-meta");
+const { packageMeta } = require("@sohailkhan0525/package-meta");
 
 const meta = packageMeta(__filename);
 ```
