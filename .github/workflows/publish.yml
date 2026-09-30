@@ -132,6 +132,14 @@ jobs:
             echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Verify npm trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --version
+          node --version
+          echo "Publishing package-root-meta with npm trusted publishing (OIDC)."
+
       - name: Publish package
         shell: bash
         run: npm publish --access public
