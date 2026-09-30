@@ -10,36 +10,61 @@ Tiny, dependency-free local package metadata and package-root resolver for Node.
 npm install package-root-meta
 ```
 
+Requires Node.js 18 or newer.
+
 ## Usage
 
 ### ESM
 
 ```ts
-import { packageMeta } from "package-root-meta";
+import { packageMeta, packageMetaSync } from "package-root-meta";
 
-const meta = packageMeta(import.meta.url);
+const meta = await packageMeta(import.meta.url);
 
-console.log(meta.root);
-console.log(meta.path);
-console.log(meta.packageJson.name);
+console.log(meta.root);              // package root directory
+console.log(meta.path);              // package.json path
+console.log(meta.packageJson.name);  // package name
 console.log(meta.packageJson.version);
+
+const syncMeta = packageMetaSync(import.meta.url);
 ```
 
 ### CommonJS
 
 ```js
-const { packageMeta } = require("package-root-meta");
+const { packageMeta, packageMetaSync } = require("package-root-meta");
 
-const meta = packageMeta(__filename);
+async function main() {
+  const meta = await packageMeta(__filename);
+
+  console.log(meta.root);
+  console.log(meta.path);
+  console.log(meta.packageJson.name);
+  console.log(meta.packageJson.version);
+
+  const syncMeta = packageMetaSync(__filename);
+}
+
+main();
 ```
 
-### Directories
+### File paths, directories, and `file:` URLs
+
+All of these forms are supported:
 
 ```ts
-const meta = packageMeta("./src");
+packageMeta("./src");
+packageMeta("/absolute/path/to/src/file.js");
+packageMeta(import.meta.url);
 ```
 
-The nearest `package.json` is returned, so nested packages in a monorepo are handled naturally.
+The resolver walks upward from the supplied location until it finds the nearest `package.json`. That means nested packages in a monorepo resolve to their own package boundary rather than the repository root.
+
+If no location is supplied, the current working directory is used:
+
+```ts
+const meta = packageMeta();
+```
 
 ## API
 
@@ -47,13 +72,15 @@ The nearest `package.json` is returned, so nested packages in a monorepo are han
 
 Finds the nearest `package.json` from a file path, directory, or `file:` URL.
 
-Returns `root`, `path`, and the parsed `packageJson`.
+Returns:
 
-`location` defaults to `process.cwd()`.
+- `root` — absolute directory containing the nearest `package.json`
+- `path` — absolute path to that `package.json`
+- `packageJson` — parsed package metadata
 
 ### `packageMetaSync(location?)`
 
-Synchronous alias for `packageMeta`.
+Synchronous version of `packageMeta` with the same input and return shape.
 
 ## Design
 
@@ -62,6 +89,7 @@ Synchronous alias for `packageMeta`.
 - TypeScript declarations
 - Node.js 18+
 - Works with monorepos and nested packages
+- Local filesystem only
 - No npm registry access
 - No package-manager assumptions
 
