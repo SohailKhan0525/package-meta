@@ -2,11 +2,9 @@ name: Publish
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - package.json
-      - package-lock.json
       - src/**
       - test/**
       - tsup.config.ts
@@ -23,7 +21,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish package-root-meta and create GitHub release
+    name: Validate and publish package-root-meta
     runs-on: ubuntu-latest
 
     steps:
@@ -47,116 +45,83 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          NAME="$(node -p "require('./package.json').name")"
-          VERSION="$(node -p "require('./package.json').version")"
-
-          test "$NAME" = "package-root-meta"
-
+          test "$(node -p "require('./package.json').name")" = "package-root-meta"
           npm run build
           npm run typecheck
           npm test
           npm pack --dry-run
 
-          echo "name=$NAME" >> "$GITHUB_ENV"
-          echo "version=$VERSION" >> "$GITHUB_ENV"
-
-      - name: Bump patch if version already exists
-        id: version
+      - name: Resolve release state
+        id: state
         shell: bash
         run: |
           set -euo pipefail
 
+          NAME="$(node -p "require('./package.json').name")"
           VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
 
-          if npm view "$name@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
-            TAG="v$VERSION"
-
-            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-              npm version patch --no-git-tag-version
-
-              NEW_VERSION="$(node -p "require('./package.json').version")"
-
-              git config user.name "github-actions[bot]"
-              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              git add package.json
-              git commit -m "chore(release): bump $name to $NEW_VERSION"
-              git push origin HEAD:main
-
-              VERSION="$NEW_VERSION"
-            else
-              echo "$name@$VERSION is already published but its release tag is missing; recovering the existing release."
-            fi
-          fi
-
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Submit package to npm staging
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "Submitting $name@$version to npm staged publishing."
-          set +e
-          OUTPUT="$(npm stage publish 2>&1)"
-          STATUS=$?
-          set -e
-
-          printf '%s\n' "$OUTPUT"
-
-          if [[ "$STATUS" -ne 0 ]] && printf '%s\n' "$OUTPUT" | grep -q 'previously staged version'; then
-            echo "This version is already staged; advancing the patch version."
-            npm version patch --no-git-tag-version
-            VERSION="$(node -p "require('./package.json').version")"
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package.json
-            git commit -m "chore(release): bump $name to $VERSION"
-            git push origin HEAD:main
-            npm stage publish
-          elif [[ "$STATUS" -ne 0 ]]; then
-            exit "$STATUS"
-          fi
-
-          echo "Package submitted to npm staging."
-          echo "The staged package must be approved on npm before it becomes live."
-          echo "publish_mode=staged" >> "$GITHUB_ENV"
-
-      - name: Create release tag
-        if: env.publish_mode == 'direct'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git fetch origin main
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          RELEASE_SHA="$(git rev-parse origin/main)"
-
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists."
+          if npm view "$NAME@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              echo "state=published_tagged" >> "$GITHUB_OUTPUT"
+            else
+              echo "state=published_untagged" >> "$GITHUB_OUTPUT"
+            fi
           else
-            git tag -a "$TAG" "$RELEASE_SHA" -m "$TAG"
-            git push origin "$TAG"
+            echo "state=unpublished" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_ENV"
-
-      - name: Create GitHub release
-        if: env.publish_mode == 'direct'
+      - name: Recover GitHub release for already-published version
+        if: steps.state.outputs.state == 'published_untagged'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_SHA: ${{ env.release_sha }}
+          TAG: ${{ steps.state.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
-          else
-            gh release create "$TAG"               --repo "$GITHUB_REPOSITORY"               --target "$RELEASE_SHA"               --title "$TAG"               --generate-notes
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          SHA="$(git rev-parse origin/main)"
+
+          git tag -a "$TAG" "$SHA" -m "$TAG"
+          git push origin "$TAG"
+
+          gh release create "$TAG"             --repo "$GITHUB_REPOSITORY"             --target "$SHA"             --title "$TAG"             --generate-notes
+
+      - name: Bump patch for next release
+        if: steps.state.outputs.state == 'published_tagged'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm version patch --no-git-tag-version
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): bump package-root-meta"
+          git push origin HEAD:main
+
+      - name: Stage unpublished version
+        if: steps.state.outputs.state == 'unpublished'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm stage publish
+
+          echo "package-root-meta@$(
+            node -p "require('./package.json').version"
+          ) has been staged on npm."
+          echo "Approve the staged package on npm to make it public."
+
+      - name: Already staged / waiting for approval
+        if: steps.state.outputs.state == 'unpublished' && failure()
+        run: echo "npm staging failed; inspect the npm error above."
