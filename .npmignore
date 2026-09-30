@@ -1,0 +1,8 @@
+src
+test
+.github
+.gitignore
+.npmignore
+tsconfig.json
+tsup.config.ts
+README.md
