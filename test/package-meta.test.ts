@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { packageMeta, packageMetaSync } from "../src/index.js";
+import { packageJsonPath, packageMeta, packageMetaSync } from "../src/index.js";
 
 const fixtures: string[] = [];
 
@@ -60,6 +60,15 @@ describe("packageMeta", () => {
     writeFileSync(join(root, "package.json"), '{"name":"directory-fixture"}');
 
     expect(packageMeta(join(root, "src")).root).toBe(root);
+  });
+
+  it("resolves the nearest package.json path without parsing it", () => {
+    const root = fixture();
+    const nested = join(root, "src");
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(root, "package.json"), '{"name":"path-fixture"}');
+
+    expect(packageJsonPath(nested)).toBe(join(root, "package.json"));
   });
 
   it("has a synchronous API", () => {
