@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: publish-package-root-meta
@@ -134,8 +135,6 @@ jobs:
       - name: Publish package
         shell: bash
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_SECRET }}
 
       - name: Resolve release metadata
         id: release
