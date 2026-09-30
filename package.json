@@ -1,5 +1,5 @@
 {
-  "name": "package-meta",
+  "name": "@sohailkhan0525/package-meta",
   "version": "0.1.0",
   "description": "Find the nearest package.json and package root from a file path or module URL.",
   "type": "module",
@@ -13,7 +13,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
@@ -21,8 +23,20 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },
-  "keywords": ["package","package-json","metadata","package-root","node","esm","commonjs","typescript","tooling"],
-  "engines": {"node": ">=18"},
+  "keywords": [
+    "package",
+    "package-json",
+    "metadata",
+    "package-root",
+    "node",
+    "esm",
+    "commonjs",
+    "typescript",
+    "tooling"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "tsup": "^8.5.0",
