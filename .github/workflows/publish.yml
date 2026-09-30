@@ -2,12 +2,15 @@ name: Publish
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - main
+    paths:
+      - package.json
+      - package-lock.json
+      - src/**
+      - test/**
+      - tsup.config.ts
   workflow_dispatch:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -20,62 +23,24 @@ concurrency:
 jobs:
   publish:
     name: Publish package-root-meta and create GitHub release
-    if: >-
-      (
-        github.event_name != 'workflow_run' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.head_branch == 'main' &&
-          !startsWith(github.event.workflow_run.head_commit.message, 'chore(release):')
-        )
-      )
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          ref: main
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v6
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org/
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Sync workflow-run checkout with main
-        if: github.event_name == 'workflow_run'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git fetch origin main
-          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-          MAIN_SHA="$(git rev-parse origin/main)"
-
-          if [[ "$HEAD_SHA" != "$MAIN_SHA" ]]; then
-            echo "main advanced after CI completed; checking whether the newer commits are release-safe."
-            CHANGED="$(git diff --name-only "$HEAD_SHA" "$MAIN_SHA")"
-
-            while IFS= read -r FILE; do
-              [[ -z "$FILE" ]] && continue
-              case "$FILE" in
-                .github/*|README.md) ;;
-                *)
-                  echo "main contains an untested change: $FILE"
-                  echo "Waiting for CI on the newer main commit instead of releasing it."
-                  exit 1
-                  ;;
-              esac
-            done <<< "$CHANGED"
-
-            git reset --hard "$MAIN_SHA"
-          fi
+        run: npm ci
 
       - name: Validate package
         shell: bash
@@ -85,118 +50,74 @@ jobs:
           NAME="$(node -p "require('./package.json').name")"
           VERSION="$(node -p "require('./package.json').version")"
 
-          test "$NAME" = "package-root-meta" || {
-            echo "Unexpected package name: $NAME"
-            exit 1
-          }
+          test "$NAME" = "package-root-meta"
 
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            TAG="$GITHUB_REF_NAME"
-            TAG_VERSION="${TAG#v}"
-
-            test "$VERSION" = "$TAG_VERSION" || {
-              echo "package.json version ($VERSION) does not match tag ($TAG)"
-              exit 1
-            }
-          fi
-
+          npm run build
           npm run typecheck
           npm test
           npm pack --dry-run
 
-      - name: Bump version if already published
+          echo "name=$NAME" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Bump patch if version already exists
         id: version
         shell: bash
         run: |
           set -euo pipefail
 
-          NAME="$(node -p "require('./package.json').name")"
           VERSION="$(node -p "require('./package.json').version")"
 
-          if npm view "$NAME@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
-            echo "$NAME@$VERSION is already published; bumping patch version."
+          if npm view "$name@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
             npm version patch --no-git-tag-version
+
             NEW_VERSION="$(node -p "require('./package.json').version")"
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package.json
-            git commit -m "chore(release): bump $NAME to $NEW_VERSION"
+            git add package.json package-lock.json
+            git commit -m "chore(release): bump $name to $NEW_VERSION"
             git push origin HEAD:main
 
-            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          else
-            echo "$NAME@$VERSION is not published; using the current version."
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            VERSION="$NEW_VERSION"
           fi
 
-      - name: Verify npm trusted publishing
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm --version
-          node --version
-          echo "Publishing package-root-meta with npm trusted publishing (OIDC)."
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Publish package
-        shell: bash
+      - name: Publish with npm trusted publishing
         run: npm publish --access public
 
-      - name: Resolve release metadata
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          VERSION="${{ steps.version.outputs.version }}"
-          RELEASE_SHA="${{ steps.version.outputs.release_sha }}"
-
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "${GITHUB_REF_TYPE:-}" == "tag" && "$VERSION" == "${GITHUB_REF_NAME#v}" ]]; then
-            TAG="$GITHUB_REF_NAME"
-          else
-            TAG="v$VERSION"
-          fi
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Point release tag at validated commit
-        if: github.event_name == 'workflow_run'
+      - name: Create release tag
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            CURRENT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')"
-            if [[ "$CURRENT_SHA" != "$RELEASE_SHA" ]]; then
-              gh api --method PATCH                 "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"                 -f sha="$RELEASE_SHA"                 -F force=true
-            fi
+          git fetch origin main
+          RELEASE_SHA="$(git rev-parse origin/main)"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
           else
-            gh api --method POST               "repos/$GITHUB_REPOSITORY/git/refs"               -f ref="refs/tags/$TAG"               -f sha="$RELEASE_SHA"
+            git tag -a "$TAG" "$RELEASE_SHA" -m "$TAG"
+            git push origin "$TAG"
           fi
+
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_ENV"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_SHA: ${{ env.release_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "GitHub release $TAG already exists."
-            exit 0
+            echo "Release $TAG already exists."
+          else
+            gh release create "$TAG"               --repo "$GITHUB_REPOSITORY"               --target "$RELEASE_SHA"               --title "$TAG"               --generate-notes
           fi
-
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$RELEASE_SHA" \
-            --title "$TAG" \
-            --generate-notes
