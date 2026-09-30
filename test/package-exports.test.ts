@@ -14,7 +14,7 @@ describe("published package shape", () => {
   });
 
   it("can be loaded through both module systems from a packed tarball", () => {
-    const temp = mkdtempSync(join(tmpdir(), "pkgroot-pack-"));
+    const temp = mkdtempSync(join(tmpdir(), "package-root-meta-pack-"));
     const packageName = JSON.parse(readFileSync("package.json", "utf8")).name as string;
     const packageDir = join(temp, "node_modules", ...packageName.split("/"));
 
