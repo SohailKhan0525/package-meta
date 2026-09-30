@@ -1,5 +1,5 @@
 {
-  "name": "@sohailkhan0525/package-meta",
+  "name": "@agent-qofeno/package-meta",
   "version": "0.1.0",
   "description": "Find the nearest package.json and package root from a file path or module URL.",
   "type": "module",
