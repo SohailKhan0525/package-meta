@@ -61,8 +61,19 @@ jobs:
           npm test
           npm pack --dry-run
 
-      - name: Publish package
-        run: npm publish --access public
+      - name: Publish package if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+
+          if npm view "$NAME@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already published; skipping npm publish."
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_SECRET }}
 
