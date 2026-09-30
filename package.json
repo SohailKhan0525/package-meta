@@ -36,7 +36,8 @@
     "esm",
     "commonjs",
     "typescript",
-    "tooling"
+    "tooling",
+    "package-boundary"
   ],
   "engines": {
     "node": ">=18"
