@@ -92,41 +92,17 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Publish with npm trusted publishing
+      - name: Submit package to npm staging
         shell: bash
         run: |
           set -euo pipefail
 
-          # npm Trusted Publishing can grant either direct publishing or staged publishing.
-          # Use direct publishing when the trust relationship allows it; otherwise stage safely.
-          set +e
-          OUTPUT="$(npm publish --access public 2>&1)"
-          STATUS=$?
-          set -e
+          echo "Submitting $name@$version to npm staged publishing."
+          npm stage publish
 
-          printf '%s\n' "$OUTPUT"
-
-          if [[ "$STATUS" -eq 0 ]]; then
-            echo "publish_mode=direct" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          if printf '%s\n' "$OUTPUT" | grep -q "OIDC permission denied for this action"; then
-            echo "Direct npm publish is not permitted by the configured trusted publisher."
-            echo "Falling back to npm staged publishing."
-            npm stage publish
-            echo "publish_mode=staged" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          exit "$STATUS"
-
-      - name: Report staged release
-        if: env.publish_mode == 'staged'
-        shell: bash
-        run: |
-          echo "Package was accepted by npm as a staged publish."
-          echo "GitHub release/tag creation is intentionally skipped until the staged package is approved on npm."
+          echo "Package submitted to npm staging."
+          echo "The staged package must be approved on npm before it becomes live."
+          echo "publish_mode=staged" >> "$GITHUB_ENV"
 
       - name: Create release tag
         if: env.publish_mode == 'direct'
