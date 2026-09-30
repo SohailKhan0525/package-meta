@@ -20,10 +20,13 @@ jobs:
   publish:
     name: Publish package-root-meta and create GitHub release
     if: >-
-      github.event_name != 'workflow_run' ||
       (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
+        github.event_name != 'workflow_run' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          !startsWith(github.event.workflow_run.head_commit.message, 'chore(release):')
+        )
       )
     runs-on: ubuntu-latest
 
@@ -71,7 +74,8 @@ jobs:
           npm test
           npm pack --dry-run
 
-      - name: Publish package if needed
+      - name: Bump version if already published
+        id: version
         shell: bash
         run: |
           set -euo pipefail
@@ -80,10 +84,27 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
 
           if npm view "$NAME@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
-            echo "$NAME@$VERSION is already published; skipping npm publish."
+            echo "$NAME@$VERSION is already published; bumping patch version."
+            npm version patch --no-git-tag-version
+            NEW_VERSION="$(node -p "require('./package.json').version")"
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore(release): bump $NAME to $NEW_VERSION"
+            git push origin HEAD:main
+
+            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
-            npm publish --access public
+            echo "$NAME@$VERSION is not published; using the current version."
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Publish package
+        shell: bash
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_SECRET }}
 
@@ -93,14 +114,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="$(node -p "require('./package.json').version")"
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_SHA="${{ steps.version.outputs.release_sha }}"
 
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "${GITHUB_REF_TYPE:-}" == "tag" && "$VERSION" == "${GITHUB_REF_NAME#v}" ]]; then
             TAG="$GITHUB_REF_NAME"
-            RELEASE_SHA="$GITHUB_SHA"
           else
             TAG="v$VERSION"
-            RELEASE_SHA="${{ github.event.workflow_run.head_sha }}"
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
