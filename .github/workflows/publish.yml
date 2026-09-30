@@ -10,15 +10,19 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   publish:
+    name: Publish pkgroot and create GitHub release
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -30,16 +34,32 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Verify version for tagged release
-        if: github.event_name == 'push'
+      - name: Validate package
         shell: bash
         run: |
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          test "$PACKAGE_VERSION" = "$TAG_VERSION" || {
-            echo "package.json version ($PACKAGE_VERSION) does not match tag ($GITHUB_REF_NAME)"
+          set -euo pipefail
+
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+
+          test "$NAME" = "pkgroot" || {
+            echo "Unexpected package name: $NAME"
             exit 1
           }
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            TAG="$GITHUB_REF_NAME"
+            TAG_VERSION="${TAG#v}"
+
+            test "$VERSION" = "$TAG_VERSION" || {
+              echo "package.json version ($VERSION) does not match tag ($TAG)"
+              exit 1
+            }
+          fi
+
+          npm run typecheck
+          npm test
+          npm pack --dry-run
 
       - name: Verify npm authentication
         run: npm whoami
@@ -51,23 +71,35 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_SECRET }}
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Resolve release tag
+        id: release
         shell: bash
         run: |
+          set -euo pipefail
+
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             TAG="$GITHUB_REF_NAME"
           else
             TAG="v$(node -p "require('./package.json').version")"
           fi
 
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; leaving it unchanged."
-          else
-            gh release create "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "$TAG" \
-              --generate-notes
+            echo "GitHub release $TAG already exists."
+            exit 0
           fi
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes
