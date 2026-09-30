@@ -7,7 +7,7 @@ Tiny, dependency-free local package metadata and package-root resolver for Node.
 ## Install
 
 ```bash
-npm install @agent-qofeno/package-meta
+npm install @qofeno-labs/package-meta
 ```
 
 ## Usage
@@ -15,7 +15,7 @@ npm install @agent-qofeno/package-meta
 ### ESM
 
 ```ts
-import { packageMeta } from "@agent-qofeno/package-meta";
+import { packageMeta } from "@qofeno-labs/package-meta";
 
 const meta = packageMeta(import.meta.url);
 
@@ -28,7 +28,7 @@ console.log(meta.packageJson.version);
 ### CommonJS
 
 ```js
-const { packageMeta } = require("@agent-qofeno/package-meta");
+const { packageMeta } = require("@qofeno-labs/package-meta");
 
 const meta = packageMeta(__filename);
 ```
