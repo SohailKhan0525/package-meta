@@ -5,17 +5,26 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-${{ github.workflow }}-${{ github.ref }}
+  group: publish-package-root-meta
   cancel-in-progress: false
 
 jobs:
   publish:
     name: Publish package-root-meta and create GitHub release
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +32,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -77,24 +87,49 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_SECRET }}
 
-      - name: Resolve release tag
+      - name: Resolve release metadata
         id: release
         shell: bash
         run: |
           set -euo pipefail
 
+          VERSION="$(node -p "require('./package.json').version")"
+
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             TAG="$GITHUB_REF_NAME"
+            RELEASE_SHA="$GITHUB_SHA"
           else
-            TAG="v$(node -p "require('./package.json').version")"
+            TAG="v$VERSION"
+            RELEASE_SHA="${{ github.event.workflow_run.head_sha }}"
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Point release tag at validated commit
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            CURRENT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')"
+            if [[ "$CURRENT_SHA" != "$RELEASE_SHA" ]]; then
+              gh api --method PATCH                 "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"                 -f sha="$RELEASE_SHA"                 -F force=true
+            fi
+          else
+            gh api --method POST               "repos/$GITHUB_REPOSITORY/git/refs"               -f ref="refs/tags/$TAG"               -f sha="$RELEASE_SHA"
+          fi
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +141,6 @@ jobs:
 
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$RELEASE_SHA" \
             --title "$TAG" \
             --generate-notes
