@@ -115,13 +115,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm stage publish
+          set +e
+          OUTPUT="$(npm stage publish 2>&1)"
+          STATUS=$?
+          set -e
 
-          echo "package-root-meta@$(
-            node -p "require('./package.json').version"
-          ) has been staged on npm."
-          echo "Approve the staged package on npm to make it public."
+          printf '%s\n' "$OUTPUT"
 
-      - name: Already staged / waiting for approval
-        if: steps.state.outputs.state == 'unpublished' && failure()
-        run: echo "npm staging failed; inspect the npm error above."
+          if [[ "$STATUS" -eq 0 ]]; then
+            echo "package-root-meta@$(node -p "require('./package.json').version") has been staged on npm."
+            echo "Approve the staged package on npm to make it public."
+            exit 0
+          fi
+
+          if printf '%s\n' "$OUTPUT" | grep -Eqi 'previously staged|already staged|409 Conflict'; then
+            echo "This version is already staged on npm and is waiting for approval."
+            exit 0
+          fi
+
+          exit "$STATUS"
