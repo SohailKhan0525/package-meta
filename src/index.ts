@@ -67,8 +67,12 @@ function findPackagePath(start: string): string {
   }
 }
 
+export function packageJsonPath(location: PackageLocation = process.cwd()): string {
+  return findPackagePath(startDirectory(location));
+}
+
 export function packageMeta(location: PackageLocation = process.cwd()): PackageMeta {
-  const path = findPackagePath(startDirectory(location));
+  const path = packageJsonPath(location);
 
   return {
     root: dirname(path),
