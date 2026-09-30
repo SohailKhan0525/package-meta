@@ -17,7 +17,7 @@ Requires Node.js 18 or newer.
 ### ESM
 
 ```ts
-import { packageMeta, packageMetaSync } from "package-root-meta";
+import { packageJsonPath, packageMeta, packageMetaSync } from "package-root-meta";
 
 const meta = await packageMeta(import.meta.url);
 
@@ -27,6 +27,7 @@ console.log(meta.packageJson.name);  // package name
 console.log(meta.packageJson.version);
 
 const syncMeta = packageMetaSync(import.meta.url);
+const packagePath = packageJsonPath(import.meta.url);
 ```
 
 ### CommonJS
@@ -77,6 +78,10 @@ Returns:
 - `root` — absolute directory containing the nearest `package.json`
 - `path` — absolute path to that `package.json`
 - `packageJson` — parsed package metadata
+
+### `packageJsonPath(location?)`
+
+Returns the absolute path to the nearest `package.json` without parsing the file. This is useful when a caller only needs the package boundary path.
 
 ### `packageMetaSync(location?)`
 
