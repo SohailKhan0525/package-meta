@@ -1,8 +1,12 @@
 {
-  "name": "package-meta",
+  "name": "@qofeno-labs/package-meta",
   "version": "0.1.0",
   "description": "Find the nearest package.json and package root from a file path or module URL.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SohailKhan0525/package-meta.git"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
