@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish pkgroot and create GitHub release
+    name: Publish package-root-meta and create GitHub release
     runs-on: ubuntu-latest
 
     steps:
@@ -42,7 +42,7 @@ jobs:
           NAME="$(node -p "require('./package.json').name")"
           VERSION="$(node -p "require('./package.json').version")"
 
-          test "$NAME" = "pkgroot" || {
+          test "$NAME" = "package-root-meta" || {
             echo "Unexpected package name: $NAME"
             exit 1
           }
