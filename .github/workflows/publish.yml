@@ -70,17 +70,23 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
 
           if npm view "$name@$VERSION" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
-            npm version patch --no-git-tag-version
+            TAG="v$VERSION"
 
-            NEW_VERSION="$(node -p "require('./package.json').version")"
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              npm version patch --no-git-tag-version
 
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package.json package-lock.json
-            git commit -m "chore(release): bump $name to $NEW_VERSION"
-            git push origin HEAD:main
+              NEW_VERSION="$(node -p "require('./package.json').version")"
 
-            VERSION="$NEW_VERSION"
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git add package.json
+              git commit -m "chore(release): bump $name to $NEW_VERSION"
+              git push origin HEAD:main
+
+              VERSION="$NEW_VERSION"
+            else
+              echo "$name@$VERSION is already published but its release tag is missing; recovering the existing release."
+            fi
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -131,6 +137,8 @@ jobs:
           set -euo pipefail
 
           git fetch origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           RELEASE_SHA="$(git rev-parse origin/main)"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
