@@ -15,7 +15,11 @@ describe("published package shape", () => {
 
   it("can be loaded through both module systems from a packed tarball", () => {
     execFileSync("npm", ["pack", "--pack-destination", tmpdir()], { stdio: "ignore" });
-    const files = execFileSync("node", ["-e", "console.log(require('fs').readdirSync(process.argv[1]).filter(x=>x.endsWith('.tgz')).sort().pop())", tmpdir()], { encoding: "utf8" }).trim();
+    const files = execFileSync(
+      "node",
+      ["-e", "console.log(require('fs').readdirSync(process.argv[1]).filter(x=>x.endsWith('.tgz')).sort().pop())", tmpdir()],
+      { encoding: "utf8" },
+    ).trim();
     const tarball = join(tmpdir(), files);
     const root = mkdtempSync(join(tmpdir(), "package-meta-pack-"));
     const packageName = JSON.parse(readFileSync("package.json", "utf8")).name as string;
@@ -24,10 +28,17 @@ describe("published package shape", () => {
       execFileSync("npm", ["init", "-y"], { cwd: root, stdio: "ignore" });
       execFileSync("npm", ["install", tarball], { cwd: root, stdio: "ignore" });
 
-      const cjsCode = "const m=require(" + JSON.stringify(packageName) + "); console.log(typeof m.packageMeta)";
-      const esmCode = "import { packageMeta } from " + JSON.stringify(packageName) + "; console.log(typeof packageMeta)";
-      const cjs = execFileSync("node", ["-e", cjsCode], { cwd: root, encoding: "utf8" }).trim();
-      const esm = execFileSync("node", ["--input-type=module", "-e", esmCode], { cwd: root, encoding: "utf8" }).trim();
+      const cjs = execFileSync(
+        "node",
+        ["-e", "const m=require(" + JSON.stringify(packageName) + "); console.log(typeof m.packageMeta)"],
+        { cwd: root, encoding: "utf8" },
+      ).trim();
+
+      const esm = execFileSync(
+        "node",
+        ["--input-type=module", "-e", "import { packageMeta } from " + JSON.stringify(packageName) + "; console.log(typeof packageMeta)"],
+        { cwd: root, encoding: "utf8" },
+      ).trim();
 
       expect(cjs).toBe("function");
       expect(esm).toBe("function");
