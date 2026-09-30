@@ -1,6 +1,6 @@
 {
   "name": "package-root-meta",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Find the nearest package.json and package root from a file path or module URL.",
   "type": "module",
   "repository": {
