@@ -98,7 +98,26 @@ jobs:
           set -euo pipefail
 
           echo "Submitting $name@$version to npm staged publishing."
-          npm stage publish
+          set +e
+          OUTPUT="$(npm stage publish 2>&1)"
+          STATUS=$?
+          set -e
+
+          printf '%s\n' "$OUTPUT"
+
+          if [[ "$STATUS" -ne 0 ]] && printf '%s\n' "$OUTPUT" | grep -q 'previously staged version'; then
+            echo "This version is already staged; advancing the patch version."
+            npm version patch --no-git-tag-version
+            VERSION="$(node -p "require('./package.json').version")"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore(release): bump $name to $VERSION"
+            git push origin HEAD:main
+            npm stage publish
+          elif [[ "$STATUS" -ne 0 ]]; then
+            exit "$STATUS"
+          fi
 
           echo "Package submitted to npm staging."
           echo "The staged package must be approved on npm before it becomes live."
