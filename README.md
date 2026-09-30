@@ -1,4 +1,4 @@
-# package-meta
+# pkgroot
 
 Tiny, dependency-free local package metadata and package-root resolver for Node.js.
 
@@ -7,7 +7,7 @@ Tiny, dependency-free local package metadata and package-root resolver for Node.
 ## Install
 
 ```bash
-npm install @qofeno-labs/package-meta
+npm install pkgroot
 ```
 
 ## Usage
@@ -15,7 +15,7 @@ npm install @qofeno-labs/package-meta
 ### ESM
 
 ```ts
-import { packageMeta } from "@qofeno-labs/package-meta";
+import { packageMeta } from "pkgroot";
 
 const meta = packageMeta(import.meta.url);
 
@@ -28,7 +28,7 @@ console.log(meta.packageJson.version);
 ### CommonJS
 
 ```js
-const { packageMeta } = require("@qofeno-labs/package-meta");
+const { packageMeta } = require("pkgroot");
 
 const meta = packageMeta(__filename);
 ```
